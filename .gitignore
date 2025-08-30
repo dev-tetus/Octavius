@@ -1,0 +1,21 @@
+# Virtual environments
+octavius-env/
+venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Pytest cache
+.pytest_cache/
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/
