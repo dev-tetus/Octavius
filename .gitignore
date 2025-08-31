@@ -21,3 +21,5 @@ __pycache__/
 # Logs
 *.log
 logs/
+
+audio_files/

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from multiprocessing import Value
+from typing import List, Optional, Union
 import pyaudio
 
 @dataclass(frozen=True)
@@ -45,3 +46,36 @@ def get_default_input_device(py_audio: pyaudio.PyAudio) -> dict:
         dict: Dictionarry with default host device information
     """
     return py_audio.get_default_input_device_info()
+
+
+def resolve_input_device(
+    p: pyaudio.PyAudio,
+    identifier: Union[int,str]
+) -> int:
+    """Resolves device input
+
+    Args:
+        p (pyaudio.PyAudio): PyAudio instance
+        identifier (Union[int,str]): Device identifier, could be an integer or string 
+
+    Returns:
+        int: Returns index for device in host
+    """
+
+    devices = list_input_devices(p)
+
+    #if identifier is an integer
+    if isinstance(identifier,int):
+        if(d.index == identifier for d in devices):
+            return identifier
+        raise ValueError(f"Identifier {identifier} not a valid input device")
+    
+    #identifier is a string
+    device_name = identifier.lower()
+    candidates = [d for d in devices if device_name in d.name.lower()]
+    if not candidates:
+        raise ValueError(f"Could not find an input device containing \"'{identifier}'\"")
+    
+    candidates.sort(key=lambda d: (d.default_sample_rate, d.max_input_channels), reverse=True)
+    best = candidates[0]
+    return best.index
