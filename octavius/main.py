@@ -1,6 +1,7 @@
 from pathlib import Path
 import pyaudio
-from .audio import list_input_devices, record_voice
+from .audio.devices import list_input_devices
+from .audio.io import record_voice
 
 def main() -> None:
     """Entry point for Octavius

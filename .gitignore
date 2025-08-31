@@ -9,6 +9,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+*.egg-info
+
 # Pytest cache
 .pytest_cache/
 

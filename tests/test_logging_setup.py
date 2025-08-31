@@ -1,7 +1,7 @@
 # tests/test_logging_setup.py
 from pathlib import Path
 import logging
-from utils.logging import setup_logging
+from octavius.utils.logging import setup_logging
 
 def test_setup_logging(tmp_path: Path):
     log_dir = tmp_path / "logs"
