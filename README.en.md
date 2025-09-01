@@ -5,7 +5,7 @@
 - ![FR](https://flagcdn.com/w20/fr.png) [Lire ici en français](README.fr.md)
 
 **Octavius** is a **voice assistant** designed for the **companionship of elderly people**.  
-Inspired by my grandmothers’ passion for Roman history, the name honors ***Gaius Octavius → Augustus***, the first Roman emperor.  
+Inspired by my grandmothers’ passion for the roma empire, the name honors ***Gaius Octavius → Augustus***, the first Roman emperor.  
 The idea is simple: an **accessible and familiar device** that allows people to talk directly to it without manipulation, offering company, natural interaction, and daily support.
 
 ---
