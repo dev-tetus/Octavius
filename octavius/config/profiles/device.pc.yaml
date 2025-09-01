@@ -1,0 +1,4 @@
+audio:
+  input_device: "focusrite"
+  sample_rate: 16000
+  channels: 1

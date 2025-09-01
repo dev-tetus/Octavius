@@ -1,0 +1,19 @@
+app:
+  name: "octavius"
+  env: "dev"
+
+paths:
+  base_dir: "."
+  logs_dir: "logs"
+  audio_dir: "audio_files"
+
+logging:
+  level: "INFO"
+  file: "octavius.log"
+  rotation_mb: 10
+
+audio:
+  input_device: "default"
+  sample_rate: 16000
+  channels: 1
+  chunk_size: 1024

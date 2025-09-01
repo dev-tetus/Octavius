@@ -18,7 +18,7 @@ def setup_logging(
     backup_count: int = 3,
     console: bool = True,
     fmt: str = _DEFAULT_FORMAT,
-    datefmt: str = _DEFAULT_DATEFMT,) -> str:
+    datefmt: str = _DEFAULT_DATEFMT,) -> Path:
     """_summary_
 
     Args:
@@ -28,7 +28,7 @@ def setup_logging(
         max_bytes (int, optional): Max file size. Defaults to 1_000_000 ~1MB.
         backup_count (int) : Number of backup files used to create when log file 
         is close to max_bytes
-        console (bool, optional): Wheter logs are show in console. Defaults to True.
+        console (bool, optional): Whether logs are shown in console or not. Defaults to True.
         fmt (str, optional): Format of logs. Defaults to _DEFAULT_FORMAT.
         datefmt (str, optional): Date format for logs. Defaults to _DEFAULT_DATEFMT.
 
@@ -57,7 +57,6 @@ def setup_logging(
         c_handler.setFormatter(formatter)
         root.addHandler(c_handler)
 
-    # Silenciar librerías ruidosas si hace falta (descomenta según tu stack)
     # logging.getLogger("urllib3").setLevel(logging.WARNING)
     # logging.getLogger("openai").setLevel(logging.INFO)
 
