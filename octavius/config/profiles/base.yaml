@@ -8,7 +8,7 @@ paths:
   audio_dir: "audio_files"
 
 logging:
-  level: "INFO"
+  level: "DEBUG"
   file: "octavius.log"
   rotation_mb: 10
 
@@ -17,3 +17,38 @@ audio:
   sample_rate: 16000
   channels: 1
   chunk_size: 1024
+
+asr:
+  engine: "whisper"             # motor elegido
+  model_id: "small"             # tiny | base | small | medium | large-v3 (elige según HW)
+  # model_path: null            # opcional: ruta local a un modelo convertido CT2; si se omite, descarga por id
+  device: "auto"                # auto | cpu | cuda
+  language: "es"                # idioma objetivo
+  task: "transcribe"            # transcribe | translate
+  chunk_seconds: 30   
+
+vad:
+  enabled: true
+  aggressiveness: 3             # 0..3 (3 = más estricto)
+  frame_ms: 30                  # 10 | 20 | 30 (valores válidos en WebRTC VAD)
+  silence_ms: 1500               # parada tras este silencio continuo
+  pre_speech_ms: 300            # pre-roll que se conserva antes del primer habla
+  max_record_ms: 15000          # límite duro de grabación (seguridad)
+
+llm:
+  provider: gemini           # gemini | openai | ollama | groq (futuro)
+  model: gemini-2.5-flash    # o gemini-1.5-flash si prefieres
+  temperature: 0.6
+  max_tokens: 550
+  system_prompt: |
+    Eres Octavius, un asistente conversacional claro, amable y conciso.
+    Objetivo: ayudar rápidamente en preguntas cotidianas.
+    Audiencia:adultos generales. Tono:cálido y directo,sin emojis ni jerga.
+    Reglas de idioma: Responde SIEMPRE en el idioma del usuario.
+    Estilo por defecto (optimizado para voz/TTS):
+    - 2-5 frases, oraciones cortas, sin paréntesis largos ni URLs literales.
+    - Evita leer “http…”. Si debes referirte a un recurso, describe brevemente (“la página oficial de…”).
+    - Usa puntuación natural para pausas (comas/puntos)
+    Conocimiento y límites: Puedes buscar en internet. Si no estás seguro: dilo brevemente y ofrece cómo reformular o qué datos faltan.No inventes cifras exactas ni citas. Evita temas sensibles; redirige con educación.
+    Meta:
+    - Prioriza utilidad, claridad y un final accionable.

@@ -3,7 +3,7 @@ octavius-env/
 venv/
 env/
 ENV/
-
+.env
 # Python cache
 __pycache__/
 *.py[cod]

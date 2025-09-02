@@ -1,16 +1,18 @@
 from __future__ import annotations
+import math
+from typing import Iterator, Optional
 from octavius.utils.pa_errors import pa_error_info
 import pyaudio
 import logging
 import numpy as np
 import soundfile as sf
+from octavius.audio.vad import WebRTCVAD, VadParams
 logger = logging.getLogger(__name__)
-
 try:
     from scipy.signal import resample_poly
 except Exception:
     logger.exception("resample_poly could not be resolved")
-    resapmle_poly = None
+    resample_poly = None
 
 def _to_mono_int16(pcm_bytes: bytes, channels:int) ->  np.ndarray:
     x = np.frombuffer(pcm_bytes, dtype=np.int16)
@@ -26,6 +28,8 @@ def _resample_int16(x:np.ndarray, src_rate:int, dst_rate:int) -> np.ndarray:
         y = resample_poly(x.astype(np.float32), dst_rate, src_rate)
         y = np.clip(np.round(y), -32768, 32767).astype(np.int16)
         return y
+    # else:
+        # raise RuntimeError("Couldn't resample...")
     t_src = np.linspace(0.0, 1.0, num=len(x), endpoint=False, dtype=np.float32)
     out_len = int(len(x) * dst_rate / src_rate)
     t_dst = np.linspace(0.0, 1.0, num=out_len, endpoint=False, dtype=np.float32)
@@ -70,7 +74,6 @@ def _pick_supported_format(
                                        input_channels=ch,
                                        input_format=fmt)
             if ok:
-                logger.info("Supported format for device (%s): %d Hz, %d ch", device_name, rate, ch)
                 return rate, ch
         except Exception as e:
             code, name, msg = pa_error_info(e)
@@ -96,7 +99,7 @@ def _write_audio(
     """
     try:
         if audio_ndarray.dtype == np.int16:
-            sf.write(file=path, data=audio_ndarray,samplerate=rate,subtype=sf.default_subtype('WAV'))
+            sf.write(file=path, data=audio_ndarray,samplerate=rate,subtype='PCM_16')
             return True
         else:
             sf.write(file=path, data=audio_ndarray, samplerate=rate)
@@ -107,7 +110,7 @@ def _write_audio(
         return False
 
 def record_voice(
-        p: pyaudio.PyAudio,
+        pyaudio_instance: pyaudio.PyAudio,
         seconds: float = 5.0,
         desired_rate: int = 16000,
         channels: int = 1,
@@ -132,17 +135,17 @@ def record_voice(
         str: Audio recorded path 
     """
     fmt = pyaudio.paInt16
-    frame_samples = int(desired_rate * frame_ms / 1000)
+    device_rate, device_channels = _pick_supported_format(pyaudio_instance, input_device_index, desired_rate, channels,fmt)
+    frame_samples = int(device_rate * frame_ms / 1000)
 
-    device_rate, device_channels = _pick_supported_format(p, input_device_index, desired_rate, channels,fmt)
-    stream = _open_stream(p, fmt, device_channels, device_rate, frame_samples, input_device_index)
+    stream = _open_stream(pyaudio_instance, fmt, device_channels, device_rate, frame_samples, input_device_index)
 
     frames: list[bytes] = []
     total_frames = int((device_rate*seconds) // frame_samples)
 
     try:
         for _ in range(total_frames):
-            frames.append(stream.read(frame_samples, exception_on_overflow=False))
+            frames.append(stream.read(frame_samples, exception_on_overflow=True))
     finally:
         if stream.is_active():
             stream.stop_stream()
@@ -163,3 +166,124 @@ def record_voice(
 
 def read_audio_metadata(audio_path: str) -> tuple(np.ndarray, int):
     return sf.read(audio_path)
+
+def _bytes_to_mono_bytes(pcm_bytes: bytes, channels: int) -> bytes:
+    """Convierte bytes PCM16 con N canales a mono (promedio) y devuelve bytes PCM16 mono."""
+    arr_mono = _to_mono_int16(pcm_bytes, channels=channels)
+    return arr_mono.tobytes()
+
+def _frame_generator(
+    p: pyaudio.PyAudio,
+    input_device_index: Optional[int],
+    sample_rate: int,
+    device_channels: int,
+    frame_ms: int,
+) -> Iterator[bytes]:
+    """
+    Genera frames PCM16 MONO del tamaño EXACTO que WebRTC-VAD espera.
+    Abre el dispositivo con sus canales nativos y downmixa a mono.
+    """
+    fmt = pyaudio.paInt16
+    frame_samples = int(sample_rate * frame_ms / 1000)
+
+    # Leemos en bloques un poco más grandes para amortiguar llamadas a read():
+    read_ms = max(frame_ms * 4, 120)
+    read_samples = int(sample_rate * read_ms / 1000)
+
+    # Abrimos con los canales QUE SOPORTA el dispositivo
+    stream = _open_stream(
+        p=p,
+        fmt=fmt,
+        channels=device_channels,
+        rate=sample_rate,
+        frame_samples=read_samples,
+        input_device_index=input_device_index,
+    )
+
+    pending = bytearray()
+    # El VAD quiere MONO: 1 canal * 2 bytes
+    subframe_bytes = frame_samples * 1 * 2
+
+    try:
+        first = True
+        while True:
+            chunk = stream.read(read_samples, exception_on_overflow=True)
+            # Si el dispositivo no es mono, convertimos aquí a mono
+            if device_channels != 1:
+                chunk = _bytes_to_mono_bytes(chunk, device_channels)
+            # Si ya es mono, chunk queda tal cual
+            pending.extend(chunk)
+
+            if first: first = False
+            while len(pending) >= subframe_bytes:
+                yield bytes(pending[:subframe_bytes])
+                del pending[:subframe_bytes]
+    finally:
+        if stream.is_active():
+            stream.stop_stream()
+        stream.close()
+
+def record_voice_vad(
+    pyaudio_instance: pyaudio.PyAudio,
+    output_path: str,
+    input_device_index: Optional[int],
+    sample_rate: int,          # destino deseado (coincide con settings.audio.sample_rate)
+    channels: int,             # validado a 1 en settings cuando VAD.enabled
+    vad_params: VadParams,
+) -> str:
+    """
+    Graba hasta silencio continuo (WebRTC VAD), convierte a mono/int16 si hace falta,
+    re-muestrea al sample_rate deseado y escribe WAV reutilizando tus helpers.
+    """
+    fmt = pyaudio.paInt16
+   
+
+    # Abrimos el dispositivo en un formato soportado (idealmente mono)
+    device_rate, device_channels = _pick_supported_format(
+        p=pyaudio_instance,
+        idx=input_device_index,
+        desired_rate=sample_rate,
+        desired_channels=channels,  # VAD => 1
+        fmt=fmt
+    )
+    
+
+    # Generador de frames al ritmo REAL del dispositivo
+    frames_iter = _frame_generator(
+        p=pyaudio_instance,
+        input_device_index=input_device_index,
+        sample_rate=device_rate,
+        device_channels=device_channels,
+        frame_ms=vad_params.frame_ms,
+    )
+    
+    aligned_vad = VadParams(
+        aggressiveness=vad_params.aggressiveness,
+        frame_ms=vad_params.frame_ms,
+        silence_ms=vad_params.silence_ms,
+        pre_speech_ms=vad_params.pre_speech_ms,
+        sample_rate=device_rate,        # <-- CLAVE: alinea al stream (48k aquí)
+        max_record_ms=vad_params.max_record_ms,
+    )
+    # Ejecuta VAD hasta silencio
+    vad = WebRTCVAD(aligned_vad)
+    frames, _stopped_by_silence = vad.capture_until_silence(frames_iter)
+    logger.debug("VAD capturó %d frames (~%.2fs), stopped_by_silence=%s",
+             len(frames), len(frames) * vad_params.frame_ms / 1000.0, _stopped_by_silence)
+    if not frames:
+        raise RuntimeError("VAD no capturó audio (0 frames). Revisa niveles del micro o parámetros de VAD.")
+    # -> bytes crudos
+    raw = b"".join(frames)
+
+    # A mono int16 si el dispositivo no es mono
+    # mono = _to_mono_int16(raw, channels=device_channels)
+
+    # Re-muestrea del rate del dispositivo al deseado
+    mono16 = _resample_int16(np.frombuffer(raw, dtype=np.int16), src_rate=device_rate, dst_rate=sample_rate)
+
+    # Escribe WAV con tu writer
+    ok = _write_audio(output_path, sample_rate, mono16)
+    if not ok:
+        logger.info("Audio not saved")
+        raise RuntimeError("Audio not saved")
+    return output_path

@@ -1,7 +1,7 @@
 from functools import lru_cache
 import os
 import platform
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from typing import Any, Dict, Literal, Optional
 from pathlib import Path
 import yaml
@@ -33,15 +33,95 @@ class AudioSettings(BaseModel):
     channels: Literal[1,2] = 1
     chunk_size: int = 1024
 
+class AsrSettings(BaseModel):
+    engine: Literal["whisper"] = "whisper"
+    implementation: Literal["faster-whisper", "whisper.cpp", "openai"] = "faster-whisper"
+    model_id: Literal["tiny", "base", "small", "medium", "large-v3"] = "small"
+    device: Literal["auto", "cpu", "cuda"] = "auto"
+    compute_type: Literal["int8", "int8_float32", "int16", "float16", "float32"] = "int8"
+    language: Literal["es", "en", "fr"] = "es"
+    task: Literal["transcribe", "translate"] = "transcribe"
+    chunk_seconds: int = 30
+
+    @field_validator("chunk_seconds")
+    @classmethod
+    def _val_chunk(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("asr.chunk_seconds debe ser > 0")
+        return v
+
+class VadSettings(BaseModel):
+    enabled: bool = True
+    aggressiveness: int = 2
+    frame_ms: int = 30
+    silence_ms: int = 800
+    pre_speech_ms: int = 300
+    max_record_ms: int = 15000
+
+    @field_validator("aggressiveness")
+    @classmethod
+    def _val_aggr(cls, v: int) -> int:
+        if v not in (0, 1, 2, 3):
+            raise ValueError("vad.aggressiveness must be between 0..3")
+        return v
+
+    @field_validator("frame_ms")
+    @classmethod
+    def _val_frame(cls, v: int) -> int:
+        if v not in (10, 20, 30):
+            raise ValueError("vad.frame_ms must be 10, 20 or 30 ms")
+        return v
+
+    @field_validator("silence_ms", "pre_speech_ms", "max_record_ms")
+    @classmethod
+    def _val_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("vad.* must be > 0")
+        return v
+
+class LlmSettings(BaseModel):
+    provider: Literal["gemini", "openai", "ollama", "groq"] = "gemini"
+    model: str = "gemini-2.5-flash"
+    temperature: float = 0.6
+    max_tokens: int = 350
+    system_prompt: Optional[str] = None
+
+    @field_validator("temperature")
+    @classmethod
+    def _val_temp(cls, v: float) -> float:
+        if not (0.0 <= v <= 2.0):
+            raise ValueError("llm.temperature debe estar entre 0.0 y 2.0")
+        return v
+
+    @field_validator("max_tokens")
+    @classmethod
+    def _val_tokens(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("llm.max_tokens debe ser > 0")
+        return v
+
 class Settings(BaseModel):
     app: AppSettings
     paths: PathsSettings
     logging: LoggingSettings
     audio: AudioSettings
+    asr: AsrSettings
+    vad: VadSettings
+    llm: LlmSettings
     def ensure_directories(self):
         self.paths.finalize()
         self.paths.logs_dir.mkdir(parents=True, exist_ok=True)
         self.paths.audio_dir.mkdir(parents=True, exist_ok=True)
+    
+    @model_validator(mode="after")
+    def _check_vad_compat(self):
+        # Coherencia VAD ↔ audio
+        if self.vad.enabled:
+            if self.audio.channels != 1:
+                raise ValueError("VAD requiere audio.channels = 1 (mono).")
+            if self.audio.sample_rate not in (8000, 16000, 32000, 48000):
+                raise ValueError("VAD soporta sample_rate 8k/16k/32k/48k.")
+        return self
 
 PROFILES_DIR = Path(__file__).parent / "profiles"
 

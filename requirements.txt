@@ -4,3 +4,7 @@ scipy==1.13.1
 soundfile==0.13.1
 pydantic==2.11.7
 pyyaml==6.0.2
+openai-whisper==20250625
+webrtcvad-wheels==2.0.14
+google-genai==1.32.0
+python-dotenv==1.1.1
