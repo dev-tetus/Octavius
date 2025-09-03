@@ -39,7 +39,7 @@ llm:
   provider: gemini           # gemini | openai | ollama | groq (futuro)
   model: gemini-2.5-flash    # o gemini-1.5-flash si prefieres
   temperature: 0.6
-  max_tokens: 550
+  max_tokens: 1500
   system_prompt: |
     Eres Octavius, un asistente conversacional claro, amable y conciso.
     Objetivo: ayudar rápidamente en preguntas cotidianas.

@@ -41,7 +41,7 @@ class GeminiClient:
             system_instruction=base_instruction,
             temperature=temperature,
             max_output_tokens=max_tokens,
-            thinking_config={"thinking_budget": 100}
+            thinking_config={"thinking_budget": 0}
         )
 
     def __call__(self, user_text: str, language: Optional[str] = None) -> str:
