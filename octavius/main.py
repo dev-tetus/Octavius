@@ -45,16 +45,13 @@ def main() -> int:
             system_prompt=settings.llm.system_prompt,
         )
         while True:
-            # Un turno: VAD + grabación hasta silencio + ASR
-            transcription =pipeline_loop(
-            transcription =pipeline_loop(
+            pipeline_loop(
                 settings,
                 transcriber=transcriber,
                 on_status=lambda s: log.debug("TM: %s", s),
                 on_final_text=lambda tr: log.info("LLM Response -> %s", tr),
                 llm_fn=gpt
             )
-
     except KeyboardInterrupt:
         log.info("Stopping Octavius (Ctrl+C).")
         return 0
