@@ -51,16 +51,26 @@ class WhisperTranscriber(Transcriber):
         self.language = a.language
         self.task = a.task
 
-    def transcribe(self, wav_path: str, language: Optional[str] = None) -> Transcription:
+    def _getfp16(self):
+        return bool(str(getattr(self.model, "device", "")) == "cuda" or torch.cuda.is_available())
+    def transcribe_from_saved_audio(self, wav_path: str, language: Optional[str] = None) -> Transcription:
         lang = language or self.language
         audio = _ensure_mono_16k(wav_path)
-        is_cuda = str(getattr(self.model, "device", "")) == "cuda" or torch.cuda.is_available()
-        fp16 = bool(is_cuda)
         result = self.model.transcribe(
             audio,
             language=None,
             task=self.task,
-            fp16=fp16
+            fp16=self._getfp16()
+        )
+        text = result["text"].strip()
+        return Transcription(text=text, language=result.get("language"))
+    
+    def transcribe(self, audio: np.array) -> Transcription:
+        result = self.model.transcribe(
+            audio,
+            language=None,
+            task=self.task,
+            fp16=self._getfp16()
         )
         text = result["text"].strip()
         return Transcription(text=text, language=result.get("language"))

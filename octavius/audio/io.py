@@ -156,13 +156,9 @@ def record_voice(
     mono = _to_mono_int16(raw, channels=device_channels)
 
     mono16 = _resample_int16(mono, src_rate=device_rate, dst_rate=desired_rate)
-
-    is_saved = _write_audio(output_path, desired_rate, mono16)
-    if is_saved:
-        return output_path
-    else:
-        logger.info("Audio not saved")
-        raise RuntimeError("Audio not saved")
+    yield mono16.tobytes()
+    
+    
 
 def read_audio_metadata(audio_path: str) -> tuple(np.ndarray, int):
     return sf.read(audio_path)
@@ -219,8 +215,7 @@ def _frame_generator(
                 yield bytes(pending[:subframe_bytes])
                 del pending[:subframe_bytes]
     finally:
-        if stream.is_active():
-            stream.stop_stream()
+        stream.stop_stream()
         stream.close()
 
 def record_voice_vad(
@@ -267,23 +262,16 @@ def record_voice_vad(
     )
     # Ejecuta VAD hasta silencio
     vad = WebRTCVAD(aligned_vad)
-    frames, _stopped_by_silence = vad.capture_until_silence(frames_iter)
-    logger.debug("VAD capturó %d frames (~%.2fs), stopped_by_silence=%s",
-             len(frames), len(frames) * vad_params.frame_ms / 1000.0, _stopped_by_silence)
-    if not frames:
-        raise RuntimeError("VAD no capturó audio (0 frames). Revisa niveles del micro o parámetros de VAD.")
-    # -> bytes crudos
-    raw = b"".join(frames)
+    while True:
+        frames, _stopped_by_silence = vad.capture_until_silence(frames_iter)
+        if frames and _stopped_by_silence:
 
-    # A mono int16 si el dispositivo no es mono
-    # mono = _to_mono_int16(raw, channels=device_channels)
+            logger.debug("VAD capturó %d frames (~%.2fs), stopped_by_silence=%s",
+                len(frames), len(frames) * vad_params.frame_ms / 1000.0, _stopped_by_silence)
+        
+            raw = b"".join(frames)
 
-    # Re-muestrea del rate del dispositivo al deseado
-    mono16 = _resample_int16(np.frombuffer(raw, dtype=np.int16), src_rate=device_rate, dst_rate=sample_rate)
+            mono = _to_mono_int16(raw, channels=device_channels)
 
-    # Escribe WAV con tu writer
-    ok = _write_audio(output_path, sample_rate, mono16)
-    if not ok:
-        logger.info("Audio not saved")
-        raise RuntimeError("Audio not saved")
-    return output_path
+            mono16 = _resample_int16(np.frombuffer(raw, dtype=np.int16), src_rate=device_rate, dst_rate=sample_rate)
+            yield mono16.tobytes()

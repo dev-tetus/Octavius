@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from typing import Callable, Optional, Protocol
 import pyaudio
-
+import numpy as np
 from octavius.asr.base import Transcription,Transcriber  
 from octavius.config.settings import Settings
 from octavius.audio.devices import resolve_input_device
@@ -15,19 +15,28 @@ from octavius.asr.whisper import WhisperTranscriber
 logger = logging.getLogger(__name__)
 class LLMFn(Protocol):
     def __call__(self, user_text: str, language: Optional[str] = None) -> str: ...
-    
-def run_once(
+
+def get_llm_response(transcription: Transcription, llm_fn:LLMFn):
+    try:
+        assistant_text = llm_fn(
+            (transcription.text or "").strip(),
+            (transcription.language or None),
+        )
+        if assistant_text:
+            return assistant_text.strip()
+        else:
+            logger.info("LLM devolvió respuesta vacía.")
+    except Exception as e:
+        logger.exception("Error en llm_fn: %s", e)
+
+def pipeline_loop(
     settings: Settings,
     transcriber: Optional[Transcriber] = None,
     on_status: Optional[Callable[[str], None]] = None,
     on_final_text: Optional[Callable[[Transcription], None]] = None,
     llm_fn: Optional[LLMFn] = None
-    ) -> Transcription:
-    """
-    1) Graba WAV (con VAD si está habilitado).
-    2) Transcribe con Whisper (faster-whisper) según settings.asr.
-    3) Devuelve el texto transcrito.
-    """
+    ) -> None:
+
     p = pyaudio.PyAudio()
     try:
         device_idx = resolve_input_device(
@@ -53,6 +62,7 @@ def run_once(
                 channels=settings.audio.channels,  # validado a mono en settings
                 vad_params=make_vad_params(settings),
             )
+
         else:
             logger.info("Grabando por duración fija…")
             if on_status:
@@ -66,30 +76,18 @@ def run_once(
                 channels=settings.audio.channels,
             )
 
-        data, sr = read_audio_metadata(recorded)
-        logger.info("WAV guardado: %s | sr=%s | %s",
-                    recorded, sr, "mono" if getattr(data, "ndim", 1) == 1 else "stereo")
-        if on_status:
-                on_status("processing")
-        _tr = transcriber or WhisperTranscriber(settings)
-        transcription = _tr.transcribe(recorded)
-        logger.info("Idioma detectado: %s. ASR: %s", transcription.language, transcription.text)
         
-        if llm_fn is not None:
-            try:
-                assistant_text = llm_fn(
-                    (transcription.text or "").strip(),
-                    (transcription.language or None),
-                )
-                if assistant_text:
-                    logger.info("LLM → %s", assistant_text.strip())
-                else:
-                    logger.info("LLM devolvió respuesta vacía.")
-            except Exception as e:
-                logger.exception("Error en llm_fn: %s", e)
-        if on_final_text:
-            on_final_text(transcription)
-        return transcription
+        _tr = transcriber or WhisperTranscriber(settings)
+        for segment in recorded:
+            if on_status:
+                on_status("processing")
+            audio = np.frombuffer(segment, dtype=np.int16).astype(np.float32) / 32768.0
+            transcription = _tr.transcribe(audio)
+            logger.info("Idioma detectado: %s. ASR: %s", transcription.language, transcription.text)
+            if llm_fn is not None:
+                llm_response = get_llm_response(transcription, llm_fn=llm_fn)
+            if on_final_text:
+                on_final_text(llm_response)
 
     finally:
         try:

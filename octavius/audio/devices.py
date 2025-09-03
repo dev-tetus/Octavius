@@ -117,7 +117,6 @@ def _score_device(
 def resolve_input_device(
     p: pyaudio.PyAudio,
     identifier: Union[int, str, None],
-    *,
     desired_rate: Optional[int] = 48000,
     desired_channels: Optional[int] = 1,
     host_api_preference: Optional[List[str]] = None,
@@ -139,7 +138,6 @@ def resolve_input_device(
     if not devices:
         raise ValueError("No hay dispositivos de entrada disponibles.")
 
-    # (1) Índice exacto
     if isinstance(identifier, int):
         if any(d.index == identifier for d in devices):
             return identifier
@@ -147,7 +145,6 @@ def resolve_input_device(
 
     # Ranking de host APIs
     if host_api_preference is None:
-        # Por tu caso real (suena bien MME #1, mal WASAPI #21):
         host_api_preference = ["MME", "Windows DirectSound", "Windows WASAPI", "Windows WDM-KS"]
     host_rank = _build_host_rank(host_api_preference)
 
@@ -163,7 +160,6 @@ def resolve_input_device(
         else:
             logger.info("Ignorando 'default' por configuración; eligiendo por score…")
 
-    # (3) Filtro por substring si `identifier` es str no vacío y no 'default'
     if isinstance(identifier, str) and identifier.strip():
         needle = identifier.lower()
         candidates = [d for d in devices if needle in d.name.lower()]
