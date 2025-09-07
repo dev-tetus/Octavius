@@ -8,7 +8,7 @@ import numpy as np
 from octavius.asr.base import Transcription,Transcriber  
 from octavius.config.settings import Settings
 from octavius.audio.devices import resolve_input_device
-from octavius.audio.io import record_voice, record_voice_vad, read_audio_metadata
+from octavius.audio.io import record_voice, record_voice_vad
 from octavius.audio.vad import make_vad_params
 from octavius.asr.whisper import WhisperTranscriber
 
@@ -41,7 +41,7 @@ def pipeline_loop(
     try:
         device_idx = resolve_input_device(
             p,
-            settings.audio.input_device,   # 1 | "Focusrite" | "default" | None
+            settings.audio.input_device,
             desired_rate=48000,
             desired_channels=1,
             host_api_preference=["MME", "Windows DirectSound", "Windows WASAPI", "Windows WDM-KS"],
@@ -59,7 +59,7 @@ def pipeline_loop(
                 output_path=str(out_wav),
                 input_device_index=device_idx,
                 sample_rate=settings.audio.sample_rate,
-                channels=settings.audio.channels,  # validado a mono en settings
+                channels=settings.audio.channels,  
                 vad_params=make_vad_params(settings),
             )
 
@@ -69,7 +69,7 @@ def pipeline_loop(
                 on_status("recording")
             recorded = record_voice(
                 pyaudio_instance=p,
-                seconds=5,  # si quieres, luego lo pasamos a settings
+                seconds=5,  
                 output_path=str(out_wav),
                 input_device_index=device_idx,
                 desired_rate=settings.audio.sample_rate,

@@ -1,10 +1,17 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "octavius"
 version = "0.1.0"
 requires-python = ">=3.9"
-# opcional: dependencias en runtime
-# dependencies = ["pyaudio", "numpy"]
 
-[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["octavius*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = ["contract: Contract tests for ports"]

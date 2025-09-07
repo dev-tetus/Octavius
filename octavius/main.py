@@ -8,6 +8,9 @@ from octavius.config.settings import get_settings
 from octavius.utils.logging import setup_logging
 from dotenv import load_dotenv
 from octavius.llm.gemini_client import GeminiClient
+from octavius.memory.infra.in_memory_conversation_store import InMemoryConversationStore
+from octavius.memory.services.conversation_history import ConversationHistory
+from octavius.llm.wrapper import make_llm_with_memory
 
 def main() -> int:
     """Entry point for Octavius
@@ -37,6 +40,14 @@ def main() -> int:
     log = logging.getLogger(__name__)
     log.info("Booting Octavius...")
     try:
+        store = InMemoryConversationStore(max_turns=20)
+        history = ConversationHistory(
+            store=store,
+            conv_id="profile:default:conv:1",
+            summarizer=None,
+            summary_every_n_turns=6,       # cada 6 turnos recalcula el resumen
+            summary_target_tokens=200,     # presupuesto del resumen
+        )
         transcriber = WhisperTranscriber(settings)
         gpt = GeminiClient(
             model=settings.llm.model,
@@ -44,13 +55,15 @@ def main() -> int:
             max_tokens=settings.llm.max_tokens,
             system_prompt=settings.llm.system_prompt,
         )
+        llm_fn = make_llm_with_memory(inner_llm=gpt, history=history, max_ctx_tokens=1200)
+
         while True:
             pipeline_loop(
                 settings,
                 transcriber=transcriber,
                 on_status=lambda s: log.debug("TM: %s", s),
                 on_final_text=lambda tr: log.info("LLM Response -> %s", tr),
-                llm_fn=gpt
+                llm_fn=llm_fn
             )
     except KeyboardInterrupt:
         log.info("Stopping Octavius (Ctrl+C).")
