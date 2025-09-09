@@ -85,7 +85,8 @@ class LlmSettings(BaseModel):
     temperature: float = 0.6
     max_tokens: int = 350
     system_prompt: Optional[str] = None
-
+    api_key_env: str = "GEMINI_API_KEY"  # name of env var holding the key
+    
     @field_validator("temperature")
     @classmethod
     def _val_temp(cls, v: float) -> float:

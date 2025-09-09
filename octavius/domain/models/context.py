@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import List
-from ..model.turn import Turn
+from .turn import Turn
 
 @dataclass
 class Context:

@@ -1,0 +1,94 @@
+from functools import lru_cache
+import logging
+import torch
+import whisper
+import soundfile as sf
+import numpy as np
+from typing import Optional
+from octavius.config.settings import AsrSettings
+from octavius.domain.models.recording_segment import RecordingSegment
+from octavius.domain.models.utterance import Utterance
+from octavius.ports.asr import ASRPort
+from octavius.utils.audio_utils import ensure_float32_mono_16k_from_pcm16
+logger = logging.getLogger(__name__)
+
+class WhisperTranscriber(ASRPort):
+    def __init__(self, settings: AsrSettings) -> None:
+        self.a = settings
+        self.model = None
+        self.language = None
+        self.task = None
+
+    def open(self) -> None:
+        self.model = self._get_model(self.a.model_id, self.a.device)
+        self.language = self.a.language
+        self.task = self.a.task
+
+    def close(self) -> None:
+        self.model = None
+
+    def transcribe_from_saved_audio(self, wav_path: str) -> Utterance:
+        audio = self._ensure_mono_16k_from_path(wav_path)
+        result = self.model.transcribe(
+            audio,
+            language=None,
+            task=self.task,
+            fp16=self._getfp16()
+        )
+        text = result["text"].strip()
+        return Utterance(raw_text=text, lang=result.get("language"))
+    
+    def transcribe(self, segment: RecordingSegment) -> Utterance:
+        audio_f32 = ensure_float32_mono_16k_from_pcm16(
+            segment.pcm,
+            sample_rate=segment.sample_rate,   # VAD te lo da; por robustez revalidamos
+            channels=segment.channels,         # debería ser 1; si no, downmix
+            # frame_ms=segment.frame_ms,       # opcional si quieres alinear a frames
+        )
+        result = self.model.transcribe(
+            audio_f32,
+            language=None,
+            task=self.task,
+            fp16=self._getfp16()
+        )
+        text = result["text"].strip()
+        return Utterance(raw_text=text, lang=result["language"])
+
+
+    def _getfp16(self):
+        return bool(str(getattr(self.model, "device", "")) == "cuda" or torch.cuda.is_available())
+    def _normalize_device(self, device_str: Optional[str]) -> str:
+        """
+        Convierte 'auto' → 'cuda' si hay GPU, si no 'cpu'.
+        Acepta ya 'cpu'/'cuda' tal cual. Cualquier otro valor cae a 'cpu'.
+        """
+        dev = (device_str or "auto").strip().lower()
+        if dev == "auto":
+            return "cuda" if torch.cuda.is_available() else "cpu"
+        if dev in ("cpu", "cuda"):
+            # Si pide cuda pero no hay, forzamos cpu
+            if dev == "cuda" and not torch.cuda.is_available():
+                logger.warning("Se solicitó device='cuda' pero no hay GPU disponible. Usando 'cpu'.")
+                return "cpu"
+            return dev
+        logger.warning("Device '%s' no reconocido. Usando 'cpu'.", device_str)
+        return "cpu"
+
+    @lru_cache(maxsize=1)
+    def _get_model(self,model_id: str, device: str) -> whisper.Whisper:
+        dev = self._normalize_device(device)
+        logger.info("Cargando Whisper '%s' en device='%s'…", model_id, dev)
+        return whisper.load_model(model_id,dev)
+
+    def _ensure_mono_16k_from_path(self,path: str) -> np.ndarray:
+        """
+        Lee WAV → float32 mono a 16 kHz usando soundfile.
+        Si llega estéreo, hace downmix. Si la tasa !=16k, levanta error (tu pipeline ya entrega 16k).
+        """
+        audio, sr = sf.read(path, dtype="float32", always_2d=False)
+        if audio.ndim == 2:
+            audio = audio.mean(axis=1)  # downmix seguro
+        if sr != 16000:
+            raise ValueError(f"Se esperaba 16 kHz, llegó {sr} Hz. Ajusta tu pipeline o añade resample aquí.")
+        return audio
+

@@ -2,7 +2,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from octavius.memory.model.turn import Turn
+    from octavius.domain.models.turn import Turn
 
 
 class Summarizer(ABC):

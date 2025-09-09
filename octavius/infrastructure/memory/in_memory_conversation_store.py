@@ -1,9 +1,9 @@
 from collections import defaultdict, deque
 from typing import Deque, Dict, List, TYPE_CHECKING
-from ..ports.conversation_store import ConversationStore
+from octavius.ports.conversation_store import ConversationStore
 
 if TYPE_CHECKING:
-    from octavius.memory.model.turn import Turn
+    from octavius.domain.models.turn import Turn
 
 class InMemoryConversationStore(ConversationStore):
     def __init__(self, max_turns: int = 20 ) -> None:
