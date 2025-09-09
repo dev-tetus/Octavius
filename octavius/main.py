@@ -12,9 +12,7 @@ from octavius.utils.logging import setup_logging
 from octavius.ports.audio_source import AudioSource
 from octavius.ports.vad import VADPort
 from octavius.ports.asr import ASRPort
-# (opcional, solo para tipado si ya lo tienes)
-# from octavius.ports.llm_client import LLMClient
-# from octavius.ports.conversation_store import ConversationStore
+from octavius.ports.llm import LLMClient
 
 # Adapters (implementations)
 from octavius.infrastructure.audio.pyaudio_source import PyAudioSource
@@ -77,12 +75,12 @@ def build_asr(settings) -> ASRPort:
     return WhisperTranscriber(settings.asr)
 
 
-def build_llm(settings):
+def build_llm(settings) ->LLMClient:
     """Instantiate the LLM client adapter."""
     return GeminiClient(settings.llm)
 
 
-def build_history(settings):
+def build_history(settings) -> ConversationHistory:
     """Instantiate conversation store + history service."""
     # Fallback robusto si no hay sección específica en settings
     max_turns = (
