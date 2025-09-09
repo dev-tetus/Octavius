@@ -1,8 +1,8 @@
 from typing import List, Optional
-from octavius.memory.ports.conversation_store import ConversationStore
-from octavius.memory.ports.summarizer import Summarizer
-from octavius.memory.model.turn import Turn
-from octavius.memory.dto.context import Context
+from octavius.ports.conversation_store import ConversationStore
+from octavius.ports.summarizer import Summarizer  # pyright: ignore[reportMissingImports]
+from octavius.domain.models.turn import Turn
+from octavius.domain.models.context import Context
 
 class ConversationHistory:
     """Conversation handler for:

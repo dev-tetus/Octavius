@@ -33,7 +33,7 @@ class WebRTCVADAdapter(VADPort):
                 .aggressiveness, .frame_ms, .silence_ms, .pre_speech_ms, .max_record_ms 
             target_sample_rate: normalized sample rate for VAD (e.g., 16000)
         """
-        self._s = self._make_vad_params(settings=Settings)
+        self._s = self._make_vad_params(settings=vad_settings)
         self._target_rate = int(target_sample_rate)
 
         # Will be set in open()
@@ -86,12 +86,14 @@ class WebRTCVADAdapter(VADPort):
         for raw in frames:
             for fr in self._dev_raw_to_target_frames(raw):
                 if self._vad.is_speech(fr, self._target_rate):
-                    if self._pre_frames and ring: speech.extend(ring); ring.clear()
-                    speech.append(fr); silence = 0
+                    if self._pre_frames and ring: 
+                        speech.extend(ring); ring.clear()
+                    speech.append(fr); 
+                    silence_count = 0
                 else:
                     if speech:
-                        silence += 1
-                        if silence >= (self._silence_frames_needed or 1):
+                        silence_count += 1
+                        if silence_count >= (self._silence_frames_needed or 1):
                             pcm = b"".join(speech)
                             seg_ms = len(speech) * self._s.frame_ms
                             return RecordingSegment(
@@ -106,8 +108,8 @@ class WebRTCVADAdapter(VADPort):
                         ring.append(fr)
                         if len(ring) > self._pre_frames: ring.pop(0)
 
-                elapsed_ms += self._s.frame_ms
-                if self._s.max_record_ms and elapsed_ms >= self._s.max_record_ms:
+                total_ms += self._s.frame_ms
+                if self._s.max_record_ms and total_ms >= self._s.max_record_ms:
                     pcm = b"".join(speech)
                     seg_ms = len(speech) * self._s.frame_ms
                     return RecordingSegment(
@@ -148,7 +150,7 @@ class WebRTCVADAdapter(VADPort):
         self._carry = mono_tgt[n:]  # keep remainder for next call
         return [f.tobytes() for f in frames]
     
-    def _make_vad_params(settings: Settings) -> VadParams:
+    def _make_vad_params(self,settings: Settings) -> VadParams:
         v, a = settings.vad, settings.audio
         return VadParams(
             aggressiveness=v.aggressiveness,

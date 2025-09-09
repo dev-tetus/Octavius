@@ -9,11 +9,12 @@ from octavius.config.settings import AsrSettings
 from octavius.domain.models.recording_segment import RecordingSegment
 from octavius.domain.models.utterance import Utterance
 from octavius.ports.asr import ASRPort
+from octavius.utils.audio_utils import ensure_float32_mono_16k_from_pcm16
 logger = logging.getLogger(__name__)
 
 class WhisperTranscriber(ASRPort):
     def __init__(self, settings: AsrSettings) -> None:
-        a = settings.asr
+        self.a = settings
         self.model = None
         self.language = None
         self.task = None
@@ -26,7 +27,7 @@ class WhisperTranscriber(ASRPort):
     def close(self) -> None:
         self.model = None
 
-    def transcribe_from_saved_audio(self, wav_path: str, language: Optional[str] = None) -> Utterance:
+    def transcribe_from_saved_audio(self, wav_path: str) -> Utterance:
         audio = self._ensure_mono_16k_from_path(wav_path)
         result = self.model.transcribe(
             audio,
@@ -35,22 +36,28 @@ class WhisperTranscriber(ASRPort):
             fp16=self._getfp16()
         )
         text = result["text"].strip()
-        return Utterance(raw_text=text, language=result.get("language"))
+        return Utterance(raw_text=text, lang=result.get("language"))
     
     def transcribe(self, segment: RecordingSegment) -> Utterance:
-        result = self.model.transcribe(
+        audio_f32 = ensure_float32_mono_16k_from_pcm16(
             segment.pcm,
+            sample_rate=segment.sample_rate,   # VAD te lo da; por robustez revalidamos
+            channels=segment.channels,         # debería ser 1; si no, downmix
+            # frame_ms=segment.frame_ms,       # opcional si quieres alinear a frames
+        )
+        result = self.model.transcribe(
+            audio_f32,
             language=None,
             task=self.task,
             fp16=self._getfp16()
         )
         text = result["text"].strip()
-        return Utterance(raw_text=text, language=result.get("language"))
+        return Utterance(raw_text=text, lang=result["language"])
 
 
     def _getfp16(self):
         return bool(str(getattr(self.model, "device", "")) == "cuda" or torch.cuda.is_available())
-    def _normalize_device(device_str: Optional[str]) -> str:
+    def _normalize_device(self, device_str: Optional[str]) -> str:
         """
         Convierte 'auto' → 'cuda' si hay GPU, si no 'cpu'.
         Acepta ya 'cpu'/'cuda' tal cual. Cualquier otro valor cae a 'cpu'.
