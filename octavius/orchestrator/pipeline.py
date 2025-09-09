@@ -49,14 +49,12 @@ def pipeline_loop(
         if on_status:
             on_status("listening")
 
-        out_wav = settings.paths.audio_dir / f"octavius_{datetime.now():%Y%m%d_%H%M%S}.wav"
         if settings.vad.enabled:
             logger.info("Grabando con VAD…")
             if on_status:
                 on_status("recording")
             recorded = record_voice_vad(
                 pyaudio_instance=p,
-                output_path=str(out_wav),
                 input_device_index=device_idx,
                 sample_rate=settings.audio.sample_rate,
                 channels=settings.audio.channels,  
@@ -64,6 +62,8 @@ def pipeline_loop(
             )
 
         else:
+            out_wav = settings.paths.audio_dir / f"octavius_{datetime.now():%Y%m%d_%H%M%S}.wav"
+
             logger.info("Grabando por duración fija…")
             if on_status:
                 on_status("recording")
@@ -81,7 +81,7 @@ def pipeline_loop(
         for segment in recorded:
             if on_status:
                 on_status("processing")
-            audio = np.frombuffer(segment, dtype=np.int16).astype(np.float32) / 32768.0
+            audio = np.frombuffer(segment, dtype=np.int16).astype(np.float32) / 32768.0         #Whisper expects a float32 normalized [-1,1]
             transcription = _tr.transcribe(audio)
             logger.info("Idioma detectado: %s. ASR: %s", transcription.language, transcription.text)
             if llm_fn is not None:

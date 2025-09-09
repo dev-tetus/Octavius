@@ -220,12 +220,11 @@ def _frame_generator(
 
 def record_voice_vad(
     pyaudio_instance: pyaudio.PyAudio,
-    output_path: str,
     input_device_index: Optional[int],
     sample_rate: int,          # destino deseado (coincide con settings.audio.sample_rate)
     channels: int,             # validado a 1 en settings cuando VAD.enabled
     vad_params: VadParams,
-) -> str:
+) -> Iterator[bytes]:
     """
     Graba hasta silencio continuo (WebRTC VAD), convierte a mono/int16 si hace falta,
     re-muestrea al sample_rate deseado y escribe WAV reutilizando tus helpers.
