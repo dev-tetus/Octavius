@@ -173,11 +173,4 @@ def resolve_input_device(
     scored.sort(key=lambda t: t[0], reverse=True)
     best_score, best = scored[0]
 
-    # Debug opcional: ranking
-    # for sc, d in scored[:6]:
-    #     logger.debug("Cand: #%d | %-30s | host=%-20s | defSR=%-6.0f | score=%d",
-    #                  d.index, d.name, d.host_api, d.default_sample_rate, sc)
-
-    # logger.info("Elegido: #%d | %s | hostApi=%s | defSR=%.0f | score=%d",
-    #             best.index, best.name, best.host_api, best.default_sample_rate, best_score)
     return best.index

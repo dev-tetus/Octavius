@@ -1,28 +1,61 @@
-from datetime import datetime
-import logging
-from pathlib import Path
-from typing import Optional
-from octavius.asr.whisper import WhisperTranscriber
-from octavius.orchestrator.pipeline import pipeline_loop
-from octavius.config.settings import get_settings
-from octavius.utils.logging import setup_logging
+# octavius/cli/main.py
+from __future__ import annotations
 from dotenv import load_dotenv
-from octavius.llm.gemini_client import GeminiClient
-from octavius.memory.infra.in_memory_conversation_store import InMemoryConversationStore
-from octavius.memory.services.conversation_history import ConversationHistory
-from octavius.llm.wrapper import make_llm_with_memory
+import logging
+import sys
+import pyaudio
 
-def main() -> int:
-    """Entry point for Octavius
-    """
+from octavius.config.settings import get_settings
+from octavius.domain.services.turn_manager import TurnManager
+from octavius.utils.logging import setup_logging
+# Ports (interfaces)
+from octavius.ports.audio_source import AudioSource
+from octavius.ports.vad import VADPort
+from octavius.ports.asr import ASRPort
+
+# Adapters (implementations)
+from octavius.infrastructure.audio.pyaudio_source import PyAudioSource
+from octavius.infrastructure.vad.vad import WebRTCVADAdapter
+from octavius.infrastructure.asr.whisper import WhisperTranscriber
+
+# Orchestration
+# from octavius.domain.services.turn_manager import TurnManager
+
+log = logging.getLogger("octavius.cli")
+
+
+
+def build_source(pa: pyaudio.PyAudio, settings) -> AudioSource:
+    """Instantiate the audio input adapter (device-native frames)."""
+    return PyAudioSource(
+        pyaudio_instance=pa,
+        input_device=settings.audio.input_device_index,  # can be None
+        desired_rate=settings.audio.sample_rate,         # just a hint for device probing
+        frame_ms=settings.vad.frame_ms,                  # device read granularity
+    )
+
+
+def build_vad(settings, target_rate: int) -> VADPort:
+    """Instantiate the VAD adapter (owns downmix/resample/framing)."""
+    return WebRTCVADAdapter(
+        vad_settings=settings,
+        target_sample_rate=target_rate,
+    )
+
+
+def build_asr(settings) -> ASRPort:  # pyright: ignore[reportUndefinedVariable]
+    """Instantiate the ASR adapter (consumes RecordingSegment)."""
+    return WhisperTranscriber(settings.asr)  # your existing adapter
+
+
+def main() -> None:
     load_dotenv() 
-    settings = get_settings()
-
+    s = get_settings()
     setup_logging(
-        level=settings.logging.level,          
-        log_dir=settings.paths.logs_dir,
-        filename=settings.logging.file,
-        max_bytes=settings.logging.rotation_mb * 1024 * 1024,
+        level=s.logging.level,          
+        log_dir=s.paths.logs_dir,
+        filename=s.logging.file,
+        max_bytes=s.logging.rotation_mb * 1024 * 1024,
         console=True,
         # Nuevas opciones:
         console_level="INFO",                  # consola más silenciosa
@@ -37,41 +70,63 @@ def main() -> int:
         },
         disable_propagation=["httpx", "httpcore"],       # por si aún “rebotan”
     )
-    log = logging.getLogger(__name__)
-    log.info("Booting Octavius...")
+
+    pa = pyaudio.PyAudio()
+    src = build_source(pa, s)
+    vad = build_vad(s, target_rate=s.audio.sample_rate)
+    asr = build_asr(s)
+
     try:
-        store = InMemoryConversationStore(max_turns=20)
-        history = ConversationHistory(
-            store=store,
-            conv_id="profile:default:conv:1",
-            summarizer=None,
-            summary_every_n_turns=6,       # cada 6 turnos recalcula el resumen
-            summary_target_tokens=200,     # presupuesto del resumen
-        )
-        transcriber = WhisperTranscriber(settings)
-        gpt = GeminiClient(
-            model=settings.llm.model,
-            temperature=settings.llm.temperature,
-            max_tokens=settings.llm.max_tokens,
-            system_prompt=settings.llm.system_prompt,
-        )
-        llm_fn = make_llm_with_memory(inner_llm=gpt, history=history, max_ctx_tokens=1200)
+        # --- Open resources in main (explicit lifecycle) --------------------
+        src.open()
+        log.info("AudioSource opened: rate=%dHz ch=%d frame=%dms", src.sample_rate, src.channels, src.frame_ms)
 
-        while True:
-            pipeline_loop(
-                settings,
-                transcriber=transcriber,
-                on_status=lambda s: log.debug("TM: %s", s),
-                on_final_text=lambda tr: log.info("LLM Response -> %s", tr),
-                llm_fn=llm_fn
-            )
-    except KeyboardInterrupt:
-        log.info("Stopping Octavius (Ctrl+C).")
-        return 0
-    except Exception as exc:
-        log.exception("Fatal error in main loop: %s", exc)
-        return 1
+        vad.open(
+            device_rate=src.sample_rate,
+            device_channels=src.channels,
+            device_frame_ms=src.frame_ms,
+        )
+        log.info("VAD opened: target_rate=%dHz frame=%dms", vad.sample_rate, vad.frame_ms)
+
+        # (Optional) if your ASR exposes open/close, do it here
+        if hasattr(asr, "open") and callable(getattr(asr, "open")):
+            asr.open()
+
+        # --- Build TurnManager with already-opened dependencies -------------
+        tm = TurnManager(
+            audio_source=src,
+            vad=vad,
+            asr=asr,
+            llm=None,  # add your LLM adapter later if you want
+        )
+
+        # --- Run one turn (speak + silence → ASR) ---------------------------
+        result = tm.run_once()
+        log.info("ASR: %s", result.asr_text)
+        if result.llm_text:
+            log.info("LLM: %s", result.llm_text)
+
+    finally:
+        # --- Close in reverse order -----------------------------------------
+        try:
+            if hasattr(asr, "close") and callable(getattr(asr, "close")):
+                asr.close()
+        except Exception:
+            log.exception("ASR close failed")
+
+        try:
+            vad.close()
+        except Exception:
+            log.exception("VAD close failed")
+
+        try:
+            src.close()
+        except Exception:
+            log.exception("AudioSource close failed")
+
+        pa.terminate()
+
+
+if __name__ == "__main__":
     
-
-if __name__=='__main__':
-    raise SystemExit(main())
+    main()
