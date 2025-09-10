@@ -85,11 +85,14 @@ Le projet combine plusieurs technologies :
 
 ## 📌 Prochaines étapes
 
+- [x] Intégrer VAD pour un enregistrement automatique jusqu’au silence  
+- [x] Connecter l’ASR (Whisper/Vosk)
+- [x] Ajouter le moteur de dialogue LLM
+- [x] Créer une mémoire principale pour maintenir une conversation fluide et cohérente
+- [ ] Concevoir et capturer les intentions dans les phrases de l’utilisateur afin de déterminer les actions à exécuter
+- [ ] Concevoir le modèle de données à utiliser pour stocker les informations pertinentes issues des interactions (intentions) de l’utilisateur avec Octavius
 - [ ] Définir le déploiement sur Raspberry Pi 4  
-- [ ] Intégrer VAD pour un enregistrement automatique jusqu’au silence  
-- [ ] Connecter l’ASR (Whisper/Vosk)
 - [ ] Connecter le TTS (voix de sortie)
-- [ ] Ajouter le moteur de dialogue GPT  
 - [ ] Concevoir une interface de configuration basique
 
 ---
