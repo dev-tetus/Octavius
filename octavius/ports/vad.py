@@ -1,6 +1,6 @@
 # octavius/application/ports/vad.py
 from __future__ import annotations
-from typing import Protocol
+from typing import Iterable, Protocol
 
 from octavius.domain.models.recording_segment import RecordingSegment
 
@@ -21,7 +21,7 @@ class VADPort(Protocol):
     def close(self) -> None: ...
 
     # segmentation
-    def capture_until_silence(self) -> RecordingSegment: ...
+    def capture_until_silence(self, frames: Iterable[bytes]) -> RecordingSegment: ...
 
     # normalized output metadata
     @property
