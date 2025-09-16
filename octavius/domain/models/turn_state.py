@@ -7,4 +7,5 @@ class TurnState(str, Enum):
     LISTENING = "listening"
     TRANSCRIBING = "transcribing"
     PROCESSING = "processing"
+    SPEAKING = "speaking"
     ERROR = "error"  # optional, used on exceptions
