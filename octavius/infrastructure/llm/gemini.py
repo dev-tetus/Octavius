@@ -136,7 +136,6 @@ class GeminiClient(LLMClient):
         if self._client is None or self._types is None:
             raise RuntimeError("Call open() before using GeminiClient")
 
-    @staticmethod
     def _safe_text(resp) -> str:
         """Extract text robustly from google.genai responses (final and streaming events)."""
         # Fast path: resp.text property
@@ -165,7 +164,6 @@ class GeminiClient(LLMClient):
             pass
         return ""
 
-    @staticmethod
     def _log_provider_meta(resp) -> None:
         """Best-effort logging of finish_reason, safety ratings and usage, at DEBUG level."""
         try:
