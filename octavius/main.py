@@ -103,11 +103,11 @@ def main() -> None:
     pa = pyaudio.PyAudio()
 
     # Build all adapters/services (no side effects yet)
-    src = build_source(pa, s)
+    src = build_source(pa=pa, settings=s)
     vad = build_vad(settings=s, target_rate=s.audio.sample_rate)
-    asr = build_asr(s)
-    llm = build_llm(s)
-    history = build_history(s)
+    asr = build_asr(settings=s)
+    llm = build_llm(settings=s)
+    history = build_history(settings=s)
 
     try:
         # ---- Open lifecycle explicitly (in order) ----
