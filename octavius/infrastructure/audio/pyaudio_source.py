@@ -4,6 +4,7 @@ from typing import Iterator, Optional, Union
 import logging
 import pyaudio
 
+from octavius.config.settings import Settings
 from octavius.ports.audio_source import AudioSource
 from octavius.utils.devices import resolve_input_device
 from octavius.utils.audio_utils import pick_supported_format, frames_per_buffer
@@ -19,15 +20,13 @@ class PyAudioSource(AudioSource):
 
     def __init__(
         self,
+        settings:Settings,
         pyaudio_instance: pyaudio.PyAudio,
-        input_device: Union[int, str, None],
-        desired_rate: int,
-        frame_ms: int,
     ) -> None:
         self._p = pyaudio_instance
-        self._input_device = input_device
-        self._desired_rate = desired_rate
-        self._frame_ms = frame_ms
+        self._input_device = settings.audio.input_device
+        self._desired_rate = settings.audio.sample_rate
+        self._frame_ms = settings.vad.frame_ms
 
         self._stream = None  # type: ignore
         self._device_index: Optional[int] = None

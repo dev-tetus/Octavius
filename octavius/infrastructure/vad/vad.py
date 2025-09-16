@@ -24,7 +24,6 @@ class WebRTCVADAdapter(VADPort):
     def __init__(
         self,
         vad_settings: Settings,
-        target_sample_rate: int,
     ) -> None:
         """
         Args:
@@ -34,8 +33,6 @@ class WebRTCVADAdapter(VADPort):
             target_sample_rate: normalized sample rate for VAD (e.g., 16000)
         """
         self._s = self._make_vad_params(settings=vad_settings)
-        self._target_rate = int(target_sample_rate)
-
         # Will be set in open()
         self._vad: Optional[webrtcvad.Vad] = None
         self._dev_rate: Optional[int] = None
@@ -58,13 +55,13 @@ class WebRTCVADAdapter(VADPort):
         self._dev_channels = device_channels
 
         # Precompute target frame sizes
-        self._frame_samples = int(self._target_rate * self._s.frame_ms / 1000)
+        self._frame_samples = int(self._s.sample_rate * self._s.frame_ms / 1000)
         self._silence_frames_needed = max(1, int(self._s.silence_ms / self._s.frame_ms))
         self._pre_frames = max(0, int(self._s.pre_speech_ms / self._s.frame_ms))
 
         logger.info(
             "VAD.open: dev_rate=%s dev_ch=%s → target_rate=%d frame_ms=%d frame_samples=%d silence_frames=%d pre_frames=%d",
-            self._dev_rate, self._dev_channels, self._target_rate, self._s.frame_ms,
+            self._dev_rate, self._dev_channels, self._s.sample_rate, self._s.frame_ms,
             self._frame_samples, self._silence_frames_needed, self._pre_frames,
         )
 
@@ -85,7 +82,7 @@ class WebRTCVADAdapter(VADPort):
 
         for raw in frames:
             for fr in self._dev_raw_to_target_frames(raw):
-                if self._vad.is_speech(fr, self._target_rate):
+                if self._vad.is_speech(fr, self._s.sample_rate):
                     if self._pre_frames and ring: 
                         speech.extend(ring); ring.clear()
                     speech.append(fr); 
@@ -98,7 +95,7 @@ class WebRTCVADAdapter(VADPort):
                             seg_ms = len(speech) * self._s.frame_ms
                             return RecordingSegment(
                                 pcm=pcm,
-                                sample_rate=self._target_rate,
+                                sample_rate=self._s.sample_rate,
                                 channels=1,
                                 frame_ms=int(self._s.frame_ms),
                                 start_ms=0,
@@ -113,7 +110,7 @@ class WebRTCVADAdapter(VADPort):
                     pcm = b"".join(speech)
                     seg_ms = len(speech) * self._s.frame_ms
                     return RecordingSegment(
-                        pcm=pcm, sample_rate=self._target_rate, channels=1,
+                        pcm=pcm, sample_rate=self._s.sample_rate, channels=1,
                         frame_ms=int(self._s.frame_ms), start_ms=0, end_ms=seg_ms
                     )
 
@@ -121,7 +118,7 @@ class WebRTCVADAdapter(VADPort):
         pcm = b"".join(speech)
         seg_ms = len(speech) * self._s.frame_ms
         return RecordingSegment(
-            pcm=pcm, sample_rate=self._target_rate, channels=1,
+            pcm=pcm, sample_rate=self._s.sample_rate, channels=1,
             frame_ms=int(self._s.frame_ms), start_ms=0, end_ms=seg_ms
         )
 
@@ -136,7 +133,7 @@ class WebRTCVADAdapter(VADPort):
         mono_dev = np.frombuffer(mono_raw, dtype=np.int16)
 
         # 2) resample to target rate
-        mono_tgt = resample_int16(mono_dev, self._dev_rate, self._target_rate)
+        mono_tgt = resample_int16(mono_dev, self._dev_rate, self._s.sample_rate)
 
         # 3) slice into fixed-size frames
         if self._carry.size:
@@ -166,7 +163,7 @@ class WebRTCVADAdapter(VADPort):
     @property
     def sample_rate(self) -> int:
         """Normalized VAD output sample rate."""
-        return self._target_rate
+        return self._s.sample_rate
 
     @property
     def frame_ms(self) -> int:

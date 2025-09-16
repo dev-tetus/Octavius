@@ -5,7 +5,7 @@ import logging
 import sys
 import pyaudio
 
-from octavius.config.settings import get_settings
+from octavius.config.settings import Settings, get_settings
 from octavius.utils.logging import setup_logging
 
 # Ports (interfaces)
@@ -52,35 +52,33 @@ def configure_logging(settings) -> None:
 
 # -------------------- Builders --------------------
 
-def build_source(pa: pyaudio.PyAudio, settings) -> AudioSource:
+def build_source(pa: pyaudio.PyAudio, settings:Settings) -> AudioSource:
     """Instantiate the audio input adapter (device-native frames)."""
     return PyAudioSource(
         pyaudio_instance=pa,
-        input_device=settings.audio.input_device,   # can be None
-        desired_rate=settings.audio.sample_rate,          # probing hint
-        frame_ms=settings.vad.frame_ms,                   # device read granularity
+        settings=settings
+        
     )
 
 
-def build_vad(settings, target_rate: int) -> VADPort:
+def build_vad(settings:Settings) -> VADPort:
     """Instantiate the VAD adapter (owns downmix/resample/framing)."""
     return WebRTCVADAdapter(
-        vad_settings=settings,        
-        target_sample_rate=target_rate,
+        vad_settings=settings       
     )
 
 
-def build_asr(settings) -> ASRPort:
+def build_asr(settings:Settings) -> ASRPort:
     """Instantiate the ASR adapter (consumes RecordingSegment)."""
     return WhisperTranscriber(settings.asr)
 
 
-def build_llm(settings) ->LLMClient:
+def build_llm(settings:Settings) ->LLMClient:
     """Instantiate the LLM client adapter."""
     return GeminiClient(settings.llm)
 
 
-def build_history(settings) -> ConversationHistory:
+def build_history(settings:Settings) -> ConversationHistory:
     """Instantiate conversation store + history service."""
     # Fallback robusto si no hay sección específica en settings
     max_turns = (
