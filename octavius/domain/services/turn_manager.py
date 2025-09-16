@@ -134,15 +134,15 @@ class TurnManager:
     def _run_once_with_frames(self, frames: Iterator[bytes]) -> TurnResult:
         """Core single-turn logic that consumes a persistent frames iterator."""
         self._set_state(TurnState.LISTENING)
-        segment = self._vad.capture_until_silence(frames)  # RecordingSegment
+        recording_segment = self._vad.capture_until_silence(frames)  # RecordingSegment
 
-        if not segment.pcm:
-            self._log.warning("Empty segment from VAD; returning early")
+        if not recording_segment.pcm:
+            self._log.warning("Empty recording_segment from VAD; returning early")
             self._set_state(TurnState.IDLE)
             return TurnResult(asr_text=None, llm_text=None, segment_ms=None)
         self._set_state(TurnState.TRANSCRIBING)
-        transcription = self._asr.transcribe(segment)  # Transcription
-        user_text = transcription.raw_text or ""
+        utt = self._asr.transcribe(recording_segment)  #Utterance
+        user_text = utt.raw_text or ""
         self._history.append(Turn(role=Role.user, text=user_text))
         self._set_state(TurnState.PROCESSING)
         ctx = self._history.build_context(max_tokens=self._ctx_budget)
@@ -158,8 +158,8 @@ class TurnManager:
         return TurnResult(
             asr_text=user_text,
             llm_text=assistant_text,
-            segment_ms=segment.duration_ms,
-            raw_asr=transcription,
+            segment_ms=recording_segment.duration_ms,
+            raw_asr=utt,
             raw_llm=llm_resp,
         )
 
