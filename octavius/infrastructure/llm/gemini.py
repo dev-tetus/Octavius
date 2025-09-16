@@ -4,6 +4,9 @@ import os
 import logging
 from typing import Iterator, Optional
 
+from google.genai import types
+
+from octavius.config.settings import LLMSettings
 from octavius.ports.llm import LLMClient
 from octavius.domain.models.llm_objects import LLMChunk, LLMResponse
 
@@ -13,7 +16,7 @@ class GeminiClient(LLMClient):
     """Gemini adapter that preserves legacy behavior (system_prompt, temperature, max_tokens,
     thinking_config and Google Search grounding), while conforming to LLMClient port."""
 
-    def __init__(self, settings) -> None:
+    def __init__(self, settings:LLMSettings) -> None:
         # settings.llm is expected; be defensive with getattr defaults
         self._s = settings
         self._client = None  # google.genai.Client
@@ -136,7 +139,7 @@ class GeminiClient(LLMClient):
         if self._client is None or self._types is None:
             raise RuntimeError("Call open() before using GeminiClient")
 
-    def _safe_text(resp) -> str:
+    def _safe_text(self, resp: types.GenerateContentResponse) -> str:
         """Extract text robustly from google.genai responses (final and streaming events)."""
         # Fast path: resp.text property
         try:
@@ -164,7 +167,7 @@ class GeminiClient(LLMClient):
             pass
         return ""
 
-    def _log_provider_meta(resp) -> None:
+    def _log_provider_meta(self,resp: types.GenerateContentResponse) -> None:
         """Best-effort logging of finish_reason, safety ratings and usage, at DEBUG level."""
         try:
             cand0 = getattr(resp, "candidates", [None])[0]

@@ -79,7 +79,7 @@ class VadSettings(BaseModel):
             raise ValueError("vad.* must be > 0")
         return v
 
-class LlmSettings(BaseModel):
+class LLMSettings(BaseModel):
     provider: Literal["gemini", "openai", "ollama", "groq"] = "gemini"
     model: str = "gemini-2.5-flash"
     temperature: float = 0.6
@@ -108,7 +108,7 @@ class Settings(BaseModel):
     audio: AudioSettings
     asr: AsrSettings
     vad: VadSettings
-    llm: LlmSettings
+    llm: LLMSettings
     def ensure_directories(self):
         self.paths.finalize()
         self.paths.logs_dir.mkdir(parents=True, exist_ok=True)
